@@ -35,8 +35,6 @@ histd_precmd() {
     local timestamp=$(date +%s)
     local record_string="${HISTD_CMD}|${cwd}|${exit_code}|${duration}|${timestamp}|${HISTD_SESSION_ID}"
 
-    echo "$record_string" >> /tmp/histd_debug.log
-
     #send record to socket with nc if socket exists
     if [[ -S "$HISTD_SOCKET" ]]; then
         echo "$record_string" | nc -w 0 -U "$HISTD_SOCKET" 2>/dev/null &
