@@ -137,13 +137,25 @@ void RecordStore::count_records() {
 
     record_count_ = 0;
     off_t offset = 0;
+
     while (offset < static_cast<off_t>(file_size_)) {
         CommandRecord header;
-        pread(fd_, &header, sizeof(header), offset);
-        offset += sizeof(header);
+
+        // if we cannot read a full header stop — file may be truncated
+        ssize_t bytes_read = pread(fd_, &header, sizeof(header), offset);
+        if (bytes_read < static_cast<ssize_t>(sizeof(header))) {
+            break;
+        }
+
+        // if next record would go past end of file stop — corrupt data
+        off_t next_offset =
+            offset + static_cast<off_t>(sizeof(header)) + header.cmd_len + header.cwd_len;
+        if (next_offset > static_cast<off_t>(file_size_)) {
+            break;
+        }
+
+        offset = next_offset;
         record_count_++;
-        offset += header.cmd_len;
-        offset += header.cwd_len;
     }
 }
 

@@ -34,6 +34,8 @@
 #include <iostream>    // for std::cerr
 #include <string>      // for std::string
 
+#include "record_store.hpp"  // for RecordStore
+
 std::string HOME_PATH;
 std::string SOCKET_PATH;
 std::string PID_FILE;
@@ -118,13 +120,42 @@ int setup_socket(const std::string& path) {
 }
 
 /**
- * Handle a record from the client
- * 1. Write the record to a log file
+ * Parses a raw pipe-delimited record string received from the shell hook
+ * and appends it to the RecordStore as a binary CommandRecord on disk.
+ *
+ * Expected format: cmd|cwd|exit_code|duration_ms|timestamp|session_id
  */
-void handle_record(const std::string& record) {
-    // write to log file
-    std::ofstream log(DATA_DIR + "/daemon.log", std::ios_base::app);
-    log << record << "\n";
+void handle_record(const std::string& record, RecordStore& store) {
+    // parse pipe-delimited record into a ParsedRecord
+    // fields: cmd|cwd|exit_code|duration_ms|timestamp|session_id
+
+    // make a mutable copy to parse
+    std::string remaining = record;
+    ParsedRecord rec;
+
+    // helper lambda to extract next field
+    // finds next | returns everything before it
+    // advances remaining past the |
+    auto next_field = [&]() -> std::string {
+        size_t pos = remaining.find('|');
+        if (pos == std::string::npos) {
+            std::string field = remaining;
+            remaining = "";
+            return field;
+        }
+        std::string field = remaining.substr(0, pos);
+        remaining = remaining.substr(pos + 1);
+        return field;
+    };
+
+    rec.cmd = next_field();
+    rec.cwd = next_field();
+    rec.exit_code = std::stoi(next_field());
+    rec.duration_ms = static_cast<uint32_t>(std::stoul(next_field()));
+    rec.timestamp = std::stoull(next_field());
+    rec.session_id = next_field();
+
+    store.append(rec);
 }
 
 /**
@@ -136,7 +167,7 @@ void handle_record(const std::string& record) {
  *   - If a client sends data, read it and handle the record
  * 4. Close the epoll instance
  */
-void run_event_loop(int server_fd) {
+void run_event_loop(int server_fd, RecordStore& store) {
     int epfd = epoll_create1(0);
 
     struct epoll_event ev;
@@ -172,7 +203,7 @@ void run_event_loop(int server_fd) {
                     if (!record.empty() && record.back() == '\n') {
                         record.pop_back();
                     }
-                    handle_record(record);
+                    handle_record(record, store);
                 }
 
                 close(client_fd);
@@ -219,7 +250,12 @@ int main() {
 
     int server_fd = setup_socket(SOCKET_PATH);
 
-    run_event_loop(server_fd);
+    // create RecordStore in WRITE mode
+    // lives for the entire daemon lifetime
+    RecordStore store(DATA_DIR + "/records.bin", Mode::WRITE);
+
+    run_event_loop(server_fd, store);
+
     close(server_fd);
     unlink(SOCKET_PATH.c_str());
     std::filesystem::remove(PID_FILE);
