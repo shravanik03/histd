@@ -46,6 +46,7 @@ RecordStore::RecordStore(const std::string& path, Mode mode) : path_(path), mode
                 mapped_ = nullptr;
                 exit(1);
             }
+            count_records();
         }
     }
 }
@@ -98,11 +99,27 @@ bool RecordStore::append(const ParsedRecord& record) {
  * Iterates every record in records.bin and calls callback on each.
  * Walks the mmap pointer from start to end, deserializing each record.
  * No-op if called in WRITE mode or if the file is empty.
- * TODO: implement in Week 5 when building the hist CLI.
  */
 void RecordStore::for_each(std::function<void(const ParsedRecord&)> callback) const {
-    // TODO: implement when building hist CLI (Week 5)
-    (void)callback;  // suppress unused parameter warning
+    if (mode_ == Mode::WRITE) return;
+    if (file_size_ == 0) return;
+    if (mapped_ == nullptr) return;
+
+    const char* ptr = static_cast<const char*>(mapped_);
+    const char* end = ptr + file_size_;
+
+    while (ptr < end) {
+        // read header first to get sizes for safe pointer advancement
+        const CommandRecord* header = reinterpret_cast<const CommandRecord*>(ptr);
+        size_t record_size = sizeof(CommandRecord) + header->cmd_len + header->cwd_len;
+
+        // safety check — do not read past end of file
+        if (ptr + record_size > end) break;
+
+        ParsedRecord record = deserialize(ptr);
+        callback(record);
+        ptr += record_size;
+    }
 }
 
 /**
@@ -131,31 +148,35 @@ CommandRecord RecordStore::serialize(const ParsedRecord& record) const {
  * sizeof(header) + cmd_len + cwd_len to reach the next record.
  */
 void RecordStore::count_records() {
-    // only called in WRITE mode — READ mode uses mmap to count
-    if (mode_ == Mode::READ) return;
     if (file_size_ == 0) return;
 
     record_count_ = 0;
-    off_t offset = 0;
 
-    while (offset < static_cast<off_t>(file_size_)) {
-        CommandRecord header;
+    if (mode_ == Mode::READ && mapped_ != nullptr) {
+        // walk mmap
+        const char* ptr = static_cast<const char*>(mapped_);
+        const char* end = ptr + file_size_;
 
-        // if we cannot read a full header stop — file may be truncated
-        ssize_t bytes_read = pread(fd_, &header, sizeof(header), offset);
-        if (bytes_read < static_cast<ssize_t>(sizeof(header))) {
-            break;
+        while (ptr < end) {
+            const CommandRecord* header = reinterpret_cast<const CommandRecord*>(ptr);
+            size_t record_size = sizeof(CommandRecord) + header->cmd_len + header->cwd_len;
+            if (ptr + record_size > end) break;
+            ptr += record_size;
+            record_count_++;
         }
-
-        // if next record would go past end of file stop — corrupt data
-        off_t next_offset =
-            offset + static_cast<off_t>(sizeof(header)) + header.cmd_len + header.cwd_len;
-        if (next_offset > static_cast<off_t>(file_size_)) {
-            break;
+    } else {
+        // walk file with pread
+        off_t offset = 0;
+        while (offset < static_cast<off_t>(file_size_)) {
+            CommandRecord header;
+            ssize_t bytes_read = pread(fd_, &header, sizeof(header), offset);
+            if (bytes_read < static_cast<ssize_t>(sizeof(header))) break;
+            off_t next_offset =
+                offset + static_cast<off_t>(sizeof(header)) + header.cmd_len + header.cwd_len;
+            if (next_offset > static_cast<off_t>(file_size_)) break;
+            offset = next_offset;
+            record_count_++;
         }
-
-        offset = next_offset;
-        record_count_++;
     }
 }
 
@@ -163,12 +184,17 @@ void RecordStore::count_records() {
  * Deserializes one record from the mmap at the given pointer.
  * Reads the CommandRecord header, then constructs std::strings
  * for cmd and cwd from the bytes immediately following the header.
- * TODO: implement in Week 5 when building the hist CLI.
  */
 ParsedRecord RecordStore::deserialize(const char* ptr) const {
-    // TODO: implement when building hist CLI (Week 5)
-    (void)ptr;  // suppress unused parameter warning
-    return ParsedRecord{};
+    const CommandRecord* header = reinterpret_cast<const CommandRecord*>(ptr);
+    ParsedRecord record;
+    record.timestamp = header->timestamp;
+    record.duration_ms = header->duration_ms;
+    record.exit_code = header->exit_code;
+    record.session_id = "";
+    record.cmd = std::string(ptr + sizeof(CommandRecord), header->cmd_len);
+    record.cwd = std::string(ptr + sizeof(CommandRecord) + header->cmd_len, header->cwd_len);
+    return record;
 }
 
 /**
