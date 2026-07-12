@@ -5,7 +5,7 @@
  * enabling fast full-text search over command history.
  *
  * Structure:
- *   token → sorted vector of Posting{record_id, score}
+ *   token → sorted vector of Posting{byte_offset, score}
  *
  * Two phases:
  *   build()   — scans all records in RecordStore, tokenizes cmd and cwd,
@@ -14,7 +14,7 @@
  *               intersects all lists, ranks by TF-IDF + recency boost,
  *               returns top-K record IDs. O(matches).
  *
- * Posting lists are sorted by record_id to enable efficient two-pointer
+ * Posting lists are sorted by byte_offset to enable efficient two-pointer
  * intersection. IDF is computed at search time using total_records_.
  */
 #pragma once
@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "record_store.hpp"
@@ -35,7 +36,7 @@ struct Posting {
     // constructor for easy initialization
     Posting(uint64_t offset, float s, uint64_t ts) : byte_offset(offset), score(s), timestamp(ts) {}
 
-    // sort by record_id for two-pointer intersection
+    // sort by byte_offset for two-pointer intersection
     bool operator<(const Posting& other) const { return byte_offset < other.byte_offset; }
 };
 
@@ -47,8 +48,9 @@ class InvertedIndex {
 
     // searches for top_k records matching all query tokens
     // returns record IDs sorted by score descending
-    std::vector<uint64_t> search(const std::string& query, const Tokenizer& tokenizer,
-                                 size_t top_k = 10) const;
+    std::vector<std::pair<uint64_t, float>> search(const std::string& query,
+                                                   const Tokenizer& tokenizer,
+                                                   size_t top_k = 10) const;
 
     // number of unique tokens in the index
     size_t term_count() const;

@@ -11,7 +11,6 @@
 #include <ctime>          // std::time
 #include <queue>          // std::priority_queue
 #include <unordered_set>  // std::unordered_set
-#include <utility>        // std::pair
 #include <vector>         // std::vector
 
 void InvertedIndex::build(RecordStore& store, const Tokenizer& tokenizer) {
@@ -43,8 +42,9 @@ void InvertedIndex::build(RecordStore& store, const Tokenizer& tokenizer) {
     }
 }
 
-std::vector<uint64_t> InvertedIndex::search(const std::string& query, const Tokenizer& tokenizer,
-                                            size_t top_k) const {
+std::vector<std::pair<uint64_t, float>> InvertedIndex::search(const std::string& query,
+                                                              const Tokenizer& tokenizer,
+                                                              size_t top_k) const {
     using ScoreId = std::pair<float, uint64_t>;
     // tokenize the query
     auto tokens = tokenizer.tokenize(query);
@@ -89,13 +89,13 @@ std::vector<uint64_t> InvertedIndex::search(const std::string& query, const Toke
         if (pq.size() > top_k) pq.pop();
     }
 
-    std::vector<uint64_t> top_k_ids;
+    std::vector<std::pair<uint64_t, float>> top_k_records;
     while (!pq.empty()) {
-        top_k_ids.push_back(pq.top().second);
+        top_k_records.push_back({pq.top().second, pq.top().first});
         pq.pop();
     }
-    std::reverse(top_k_ids.begin(), top_k_ids.end());
-    return top_k_ids;
+    std::reverse(top_k_records.begin(), top_k_records.end());
+    return top_k_records;
 }
 
 size_t InvertedIndex::term_count() const { return index_.size(); }
