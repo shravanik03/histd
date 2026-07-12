@@ -44,9 +44,11 @@ int main() {
 
     for (auto& query : queries) {
         auto results = index.search(query, tokenizer);
-        std::cout << "\nsearch(\"" << query << "\") → " << results.size() << " results: ";
-        for (auto id : results) std::cout << "[" << id << "] ";
-        std::cout << "\n";
+        std::cout << "\nsearch(\"" << query << "\") → " << results.size() << " results:\n";
+        for (auto offset : results) {
+            ParsedRecord rec = store.read_at(offset);
+            std::cout << "  [" << offset << "] " << rec.cmd << " | " << rec.cwd << "\n";
+        }
     }
 
     return 0;

@@ -28,15 +28,15 @@
 #include "tokenizer.hpp"
 
 struct Posting {
-    uint32_t record_id;
+    uint64_t byte_offset;
     float score;
     uint64_t timestamp;
 
     // constructor for easy initialization
-    Posting(uint32_t id, float s, uint64_t ts) : record_id(id), score(s), timestamp(ts) {}
+    Posting(uint64_t offset, float s, uint64_t ts) : byte_offset(offset), score(s), timestamp(ts) {}
 
     // sort by record_id for two-pointer intersection
-    bool operator<(const Posting& other) const { return record_id < other.record_id; }
+    bool operator<(const Posting& other) const { return byte_offset < other.byte_offset; }
 };
 
 class InvertedIndex {
@@ -47,7 +47,7 @@ class InvertedIndex {
 
     // searches for top_k records matching all query tokens
     // returns record IDs sorted by score descending
-    std::vector<uint32_t> search(const std::string& query, const Tokenizer& tokenizer,
+    std::vector<uint64_t> search(const std::string& query, const Tokenizer& tokenizer,
                                  size_t top_k = 10) const;
 
     // number of unique tokens in the index

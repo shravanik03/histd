@@ -57,6 +57,10 @@ class RecordStore {
     // Returns the number of records in the file
     size_t count() const;
 
+    // READ mode only — O(1) lookup via byte offset
+    // byte_offset must be a valid offset returned by InvertedIndex::search()
+    ParsedRecord read_at(uint64_t byte_offset) const;
+
    private:
     std::string path_;     // path to records.bin
     Mode mode_;            // READ or WRITE

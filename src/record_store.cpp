@@ -121,6 +121,17 @@ void RecordStore::for_each(std::function<void(const ParsedRecord&)> callback) co
         ptr += record_size;
     }
 }
+/**
+ * Reads one record from the mmap at the given byte offset.
+ * Returns an empty ParsedRecord if the offset is invalid or the file is empty.
+ */
+ParsedRecord RecordStore::read_at(uint64_t byte_offset) const {
+    if (mode_ == Mode::WRITE || mapped_ == nullptr) return ParsedRecord{};
+    if (byte_offset >= file_size_) return ParsedRecord{};
+
+    const char* ptr = static_cast<const char*>(mapped_);
+    return deserialize(ptr + byte_offset);
+}
 
 /**
  * Serializes a ParsedRecord into a CommandRecord binary header.

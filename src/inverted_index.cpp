@@ -18,7 +18,7 @@ void InvertedIndex::build(RecordStore& store, const Tokenizer& tokenizer) {
     index_.clear();
     total_records_ = store.count();
 
-    uint32_t counter = 0;
+    uint64_t byte_offset = 0;
 
     store.for_each([&](const ParsedRecord& rec) {
         auto cmd_tokens = tokenizer.tokenize(rec.cmd);
@@ -33,9 +33,9 @@ void InvertedIndex::build(RecordStore& store, const Tokenizer& tokenizer) {
         for (auto& token : all_tokens) {
             if (seen.find(token) != seen.end()) continue;
             seen.insert(token);
-            index_[token].push_back(Posting(counter, 1.0f, rec.timestamp));
+            index_[token].push_back(Posting(byte_offset, 1.0f, rec.timestamp));
         }
-        counter++;
+        byte_offset += sizeof(CommandRecord) + rec.cmd.size() + rec.cwd.size();
     });
 
     for (auto& entry : index_) {
@@ -43,9 +43,9 @@ void InvertedIndex::build(RecordStore& store, const Tokenizer& tokenizer) {
     }
 }
 
-std::vector<uint32_t> InvertedIndex::search(const std::string& query, const Tokenizer& tokenizer,
+std::vector<uint64_t> InvertedIndex::search(const std::string& query, const Tokenizer& tokenizer,
                                             size_t top_k) const {
-    using ScoreId = std::pair<float, uint32_t>;
+    using ScoreId = std::pair<float, uint64_t>;
     // tokenize the query
     auto tokens = tokenizer.tokenize(query);
     if (tokens.empty()) return {};
@@ -85,11 +85,11 @@ std::vector<uint32_t> InvertedIndex::search(const std::string& query, const Toke
     std::priority_queue<ScoreId, std::vector<ScoreId>, std::greater<ScoreId>> pq;
 
     for (auto& posting : result) {
-        pq.push({posting.score, posting.record_id});
+        pq.push({posting.score, posting.byte_offset});
         if (pq.size() > top_k) pq.pop();
     }
 
-    std::vector<uint32_t> top_k_ids;
+    std::vector<uint64_t> top_k_ids;
     while (!pq.empty()) {
         top_k_ids.push_back(pq.top().second);
         pq.pop();
@@ -119,12 +119,12 @@ std::vector<Posting> InvertedIndex::intersect(const std::vector<Posting>& a,
     std::vector<Posting> result;
     size_t i = 0, j = 0;
     while (i < a.size() && j < b.size()) {
-        if (a[i].record_id == b[j].record_id) {
-            result.push_back(Posting(a[i].record_id, a[i].score + b[j].score,
+        if (a[i].byte_offset == b[j].byte_offset) {
+            result.push_back(Posting(a[i].byte_offset, a[i].score + b[j].score,
                                      std::max(a[i].timestamp, b[j].timestamp)));
             i++;
             j++;
-        } else if (a[i].record_id < b[j].record_id) {
+        } else if (a[i].byte_offset < b[j].byte_offset) {
             i++;
         } else {
             j++;
