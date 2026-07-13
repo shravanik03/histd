@@ -19,6 +19,11 @@ void QueryEngine::ensure_index() {
 
 size_t QueryEngine::record_count() const { return store_.count(); }
 
+size_t QueryEngine::term_count() {
+    ensure_index();
+    return index_.term_count();
+}
+
 std::vector<SearchResult> QueryEngine::search(const std::string& query, bool failed_only,
                                               uint32_t since_days, const std::string& project,
                                               size_t top_k) {

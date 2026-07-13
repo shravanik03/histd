@@ -54,6 +54,8 @@ class QueryEngine {
 
     size_t record_count() const;
 
+    size_t term_count();
+
    private:
     RecordStore store_;
     InvertedIndex index_;
