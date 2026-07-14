@@ -3,4 +3,4 @@ data/
 *.bin
 *.pid
 *.sock
-*.png
+build-debug/
