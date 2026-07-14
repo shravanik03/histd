@@ -41,10 +41,20 @@ struct Posting {
 };
 
 class InvertedIndex {
+    // IndexSerializer needs direct access to index_ and total_records_
+    // to serialize the in-memory index to index.bin
+    friend class IndexSerializer;
+
    public:
     // builds index by scanning all records in store
     // tokenizes cmd and cwd fields of each record
     void build(RecordStore& store, const Tokenizer& tokenizer);
+
+    // adds a single record to the index incrementally
+    // used by the daemon as new commands arrive, avoiding a full rebuild
+    // does not re-sort posting lists — relies on byte_offset being
+    // monotonically increasing since records are appended in order
+    void add_record(const ParsedRecord& record, uint64_t byte_offset, const Tokenizer& tokenizer);
 
     // searches for top_k records matching all query tokens
     // returns record IDs sorted by score descending

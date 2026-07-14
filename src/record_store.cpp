@@ -71,10 +71,13 @@ RecordStore::~RecordStore() {
  * Serializes the ParsedRecord into a binary CommandRecord header
  * followed by the raw cmd and cwd string bytes.
  * Updates file_size_ and record_count_ after writing.
- * Returns false immediately if called in READ mode.
+ * Returns the byte offset where the record was written,
+ * or UINT64_MAX if called in READ mode.
  */
-bool RecordStore::append(const ParsedRecord& record) {
-    if (mode_ == Mode::READ) return false;
+uint64_t RecordStore::append(const ParsedRecord& record) {
+    if (mode_ == Mode::READ) return UINT64_MAX;
+
+    uint64_t write_offset = file_size_;  // capture BEFORE writing
 
     // build CommandRecord header - serialize ParsedRecord
     CommandRecord header = serialize(record);
@@ -92,7 +95,8 @@ bool RecordStore::append(const ParsedRecord& record) {
 
     file_size_ += sizeof(header) + record.cmd.size() + record.cwd.size();
     record_count_++;
-    return true;
+
+    return write_offset;
 }
 
 /**

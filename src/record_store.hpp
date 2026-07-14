@@ -46,8 +46,9 @@ class RecordStore {
 
     // WRITE mode only
     // serializes ParsedRecord to binary and appends to disk
-    // returns true on success, false on failure or wrong mode
-    bool append(const ParsedRecord& record);
+    // returns the byte offset where the record was written,
+    // or UINT64_MAX on failure or if called in READ mode
+    uint64_t append(const ParsedRecord& record);
 
     // READ mode only
     // calls callback once for every record in the file
