@@ -34,7 +34,10 @@
 #include <iostream>    // for std::cerr
 #include <string>      // for std::string
 
+#include "index_store.hpp"
+#include "inverted_index.hpp"
 #include "record_store.hpp"  // for RecordStore
+#include "tokenizer.hpp"
 
 std::string HOME_PATH;
 std::string SOCKET_PATH;
@@ -125,7 +128,9 @@ int setup_socket(const std::string& path) {
  *
  * Expected format: cmd|cwd|exit_code|duration_ms|timestamp|session_id
  */
-void handle_record(const std::string& record, RecordStore& store) {
+void handle_record(const std::string& record, RecordStore& store, InvertedIndex& index,
+                   const Tokenizer& tokenizer, const std::string& index_path,
+                   uint32_t& records_since_flush) {
     // parse pipe-delimited record into a ParsedRecord
     // fields: cmd|cwd|exit_code|duration_ms|timestamp|session_id
 
@@ -155,7 +160,18 @@ void handle_record(const std::string& record, RecordStore& store) {
     rec.timestamp = std::stoull(next_field());
     rec.session_id = next_field();
 
-    store.append(rec);
+    uint64_t offset = store.append(rec);
+    if (offset == UINT64_MAX) return;  // append failed, skip indexing
+
+    index.add_record(rec, offset, tokenizer);
+    records_since_flush++;
+
+    // periodic flush — every 50 records
+    if (records_since_flush >= 50) {
+        uint64_t current_size = offset + sizeof(CommandRecord) + rec.cmd.size() + rec.cwd.size();
+        IndexSerializer::save(index, index_path, current_size);
+        records_since_flush = 0;
+    }
 }
 
 /**
@@ -167,7 +183,9 @@ void handle_record(const std::string& record, RecordStore& store) {
  *   - If a client sends data, read it and handle the record
  * 4. Close the epoll instance
  */
-void run_event_loop(int server_fd, RecordStore& store) {
+void run_event_loop(int server_fd, RecordStore& store, InvertedIndex& index,
+                    const Tokenizer& tokenizer, const std::string& index_path,
+                    uint32_t& records_since_flush) {
     int epfd = epoll_create1(0);
 
     struct epoll_event ev;
@@ -203,7 +221,7 @@ void run_event_loop(int server_fd, RecordStore& store) {
                     if (!record.empty() && record.back() == '\n') {
                         record.pop_back();
                     }
-                    handle_record(record, store);
+                    handle_record(record, store, index, tokenizer, index_path, records_since_flush);
                 }
 
                 close(client_fd);
@@ -254,8 +272,21 @@ int main() {
     // lives for the entire daemon lifetime
     RecordStore store(DATA_DIR + "/records.bin", Mode::WRITE);
 
-    run_event_loop(server_fd, store);
+    std::string index_path = DATA_DIR + "/index.bin";
+    InvertedIndex index;
+    Tokenizer tokenizer;
+    uint32_t records_since_flush = 0;
 
+    // startup catch-up: rebuild in-memory index from records.bin
+    // (Option 1 — full scan on daemon startup only, not on every search)
+    {
+        RecordStore read_store(DATA_DIR + "/records.bin", Mode::READ);
+        index.build(read_store, tokenizer);
+    }
+
+    run_event_loop(server_fd, store, index, tokenizer, index_path, records_since_flush);
+
+    IndexSerializer::save(index, index_path, store.file_size());
     close(server_fd);
     unlink(SOCKET_PATH.c_str());
     std::filesystem::remove(PID_FILE);

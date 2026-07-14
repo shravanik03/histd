@@ -69,6 +69,9 @@ class RecordStore {
     // byte_offset must be a valid offset returned by InvertedIndex::search()
     ParsedRecord read_at(uint64_t byte_offset) const;
 
+    // Get file size
+    uint64_t file_size() const;
+
    private:
     std::string path_;     // path to records.bin
     Mode mode_;            // READ or WRITE

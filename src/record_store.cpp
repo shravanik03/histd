@@ -244,3 +244,5 @@ ParsedRecord RecordStore::deserialize(const char* ptr) const {
  * Returns the total number of records stored in records.bin.
  */
 size_t RecordStore::count() const { return record_count_; }
+
+uint64_t RecordStore::file_size() const { return file_size_; }
