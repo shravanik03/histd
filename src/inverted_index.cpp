@@ -42,6 +42,27 @@ void InvertedIndex::build(RecordStore& store, const Tokenizer& tokenizer) {
     }
 }
 
+void InvertedIndex::add_record(const ParsedRecord& record, uint64_t byte_offset,
+                               const Tokenizer& tokenizer) {
+    // tokenize cmd and cwd
+    auto cmd_tokens = tokenizer.tokenize(record.cmd);
+    auto cwd_tokens = tokenizer.tokenize(record.cwd);
+
+    // combine cmd and cwd tokens
+    auto all_tokens = cmd_tokens;
+    all_tokens.insert(all_tokens.end(), cwd_tokens.begin(), cwd_tokens.end());
+
+    // deduplicate per record
+    std::unordered_set<std::string> seen;
+    for (auto& token : all_tokens) {
+        if (seen.find(token) != seen.end()) continue;
+        seen.insert(token);
+        index_[token].push_back(Posting(byte_offset, 1.0f, record.timestamp));
+    }
+
+    total_records_++;
+}
+
 std::vector<std::pair<uint64_t, float>> InvertedIndex::search(const std::string& query,
                                                               const Tokenizer& tokenizer,
                                                               size_t top_k) const {
