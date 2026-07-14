@@ -22,10 +22,13 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>  // std::unique_ptr
 #include <string>
 #include <vector>
 
+#include "index_store.hpp"
 #include "inverted_index.hpp"
+#include "posting_view.hpp"
 #include "record_store.hpp"
 #include "tokenizer.hpp"
 
@@ -62,6 +65,8 @@ class QueryEngine {
     Tokenizer tokenizer_;
     bool index_built_ = false;
 
+    std::unique_ptr<IndexReader> reader_;  // nullptr if not using mmap path
+
     // ensures index is built before searching
     void ensure_index();
 
@@ -69,4 +74,8 @@ class QueryEngine {
     std::vector<SearchResult> apply_filters(const std::vector<std::pair<uint64_t, float>>& results,
                                             bool failed_only, uint32_t since_days,
                                             const std::string& project) const;
+
+    // search using the IndexReader
+    std::vector<std::pair<uint64_t, float>> search_via_reader(const std::string& query,
+                                                              size_t top_k) const;
 };

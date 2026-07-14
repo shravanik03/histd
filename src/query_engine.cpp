@@ -6,6 +6,7 @@
  */
 #include "query_engine.hpp"
 
+#include <cmath>  // std::log
 #include <ctime>  // std::time
 
 QueryEngine::QueryEngine(const std::string& records_path) : store_(records_path, Mode::READ) {}
@@ -59,4 +60,49 @@ std::vector<SearchResult> QueryEngine::apply_filters(
     }
 
     return filtered;
+}
+
+std::vector<std::pair<uint64_t, float>> QueryEngine::search_via_reader(const std::string& query,
+                                                                       size_t top_k) const {
+    auto tokens = tokenizer_.tokenize(query);
+    if (tokens.empty()) return {};
+
+    std::vector<std::vector<PostingView>> posting_lists;
+    std::vector<uint32_t> doc_counts;
+
+    for (auto& token : tokens) {
+        const DiskPosting* ptr = nullptr;
+        uint32_t count = 0;
+        if (!reader_->find_postings(token, &ptr, &count)) {
+            return {};  // AND logic
+        }
+
+        std::vector<PostingView> views;
+        views.reserve(count);
+        for (uint32_t i = 0; i < count; i++) {
+            views.push_back({ptr[i].byte_offset, ptr[i].score, ptr[i].timestamp});
+        }
+        posting_lists.push_back(std::move(views));
+        doc_counts.push_back(count);
+    }
+
+    if (posting_lists.empty()) return {};
+
+    // intersect all lists using shared logic
+    std::vector<PostingView> result = posting_lists[0];
+    for (size_t i = 1; i < posting_lists.size(); i++) {
+        result = intersect_views(result, posting_lists[i]);
+    }
+
+    if (result.empty()) return {};
+
+    // idf computed from reader's term stats instead of InvertedIndex
+    float base_score = 0.0f;
+    uint64_t total_records = reader_->total_records();
+    for (auto count : doc_counts) {
+        base_score += std::log(static_cast<float>(total_records + 1) / static_cast<float>(count));
+    }
+
+    uint64_t now = static_cast<uint64_t>(std::time(nullptr));
+    return rank_top_k(result, base_score, now, top_k);
 }
