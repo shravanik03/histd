@@ -7,3 +7,6 @@ target_link_libraries(test_index PRIVATE histd_core)
 
 add_executable(test_failure_clusterer test_failure_clusterer.cpp)
 target_link_libraries(test_failure_clusterer PRIVATE histd_core)
+
+add_executable(test_index_store test_index_store.cpp)
+target_link_libraries(test_index_store PRIVATE histd_core)
