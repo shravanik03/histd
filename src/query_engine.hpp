@@ -64,6 +64,7 @@ class QueryEngine {
     InvertedIndex index_;
     Tokenizer tokenizer_;
     bool index_built_ = false;
+    std::string records_path_;
 
     std::unique_ptr<IndexReader> reader_;  // nullptr if not using mmap path
 

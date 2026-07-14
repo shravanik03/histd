@@ -6,22 +6,51 @@
  */
 #include "query_engine.hpp"
 
+#include <sys/stat.h>  // stat()
+
 #include <cmath>  // std::log
 #include <ctime>  // std::time
 
-QueryEngine::QueryEngine(const std::string& records_path) : store_(records_path, Mode::READ) {}
+namespace {
+uint64_t get_file_size(const std::string& path) {
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0) return 0;
+    return static_cast<uint64_t>(st.st_size);
+}
+}  // namespace
+
+QueryEngine::QueryEngine(const std::string& records_path)
+    : store_(records_path, Mode::READ), records_path_(records_path) {}
 
 void QueryEngine::ensure_index() {
-    if (!index_built_) {
+    if (index_built_) return;
+
+    // derive index path from records_path_
+    size_t last_slash = records_path_.find_last_of('/');
+    std::string dir = (last_slash == std::string::npos) ? "." : records_path_.substr(0, last_slash);
+    std::string index_path = dir + "/index.bin";
+
+    uint64_t records_size = get_file_size(records_path_);
+
+    auto candidate_reader = std::make_unique<IndexReader>(index_path);
+    if (candidate_reader->valid() && candidate_reader->last_offset() == records_size) {
+        // index.bin is fully fresh — use the fast mmap path
+        reader_ = std::move(candidate_reader);
+    } else {
+        // stale, missing, or corrupt — fall back to full rebuild
         index_.build(store_, tokenizer_);
-        index_built_ = true;
     }
+
+    index_built_ = true;
 }
 
 size_t QueryEngine::record_count() const { return store_.count(); }
 
 size_t QueryEngine::term_count() {
     ensure_index();
+    if (reader_ && reader_->valid()) {
+        return reader_->term_count();
+    }
     return index_.term_count();
 }
 
@@ -29,7 +58,13 @@ std::vector<SearchResult> QueryEngine::search(const std::string& query, bool fai
                                               uint32_t since_days, const std::string& project,
                                               size_t top_k) {
     ensure_index();
-    auto results = index_.search(query, tokenizer_, top_k * 3);
+    std::vector<std::pair<uint64_t, float>> results;
+    if (reader_ && reader_->valid()) {
+        results = search_via_reader(query, top_k * 3);
+    } else {
+        results = index_.search(query, tokenizer_, top_k * 3);
+    }
+
     if (results.empty()) return {};
     auto filtered = apply_filters(results, failed_only, since_days, project);
 
