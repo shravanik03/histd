@@ -125,6 +125,34 @@ void RecordStore::for_each(std::function<void(const ParsedRecord&)> callback) co
         ptr += record_size;
     }
 }
+
+/**
+ * Iterates every record in records.bin starting from start_offset and calls callback on each.
+ * Walks the mmap pointer from start_offset to end, deserializing each record.
+ * No-op if called in WRITE mode or if the file is empty.
+ */
+void RecordStore::for_each_from_offset(
+    uint64_t start_offset, std::function<void(const ParsedRecord&, uint64_t)> callback) const {
+    if (mode_ == Mode::WRITE || mapped_ == nullptr) return;
+    if (start_offset >= file_size_) return;  // nothing new to scan
+
+    const char* base = static_cast<const char*>(mapped_);
+    const char* ptr = base + start_offset;
+    const char* end = base + file_size_;
+
+    while (ptr < end) {
+        const CommandRecord* header = reinterpret_cast<const CommandRecord*>(ptr);
+        size_t record_size = sizeof(CommandRecord) + header->cmd_len + header->cwd_len;
+        if (ptr + record_size > end) break;
+
+        uint64_t byte_offset = static_cast<uint64_t>(ptr - base);
+        ParsedRecord rec = deserialize(ptr);
+        callback(rec, byte_offset);
+
+        ptr += record_size;
+    }
+}
+
 /**
  * Reads one record from the mmap at the given byte offset.
  * Returns an empty ParsedRecord if the offset is invalid or the file is empty.

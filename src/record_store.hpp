@@ -55,6 +55,13 @@ class RecordStore {
     // callback receives a fully populated ParsedRecord
     void for_each(std::function<void(const ParsedRecord&)> callback) const;
 
+    // in record_store.hpp, public section
+    // walks records.bin starting at start_offset, calling callback for each record
+    // callback receives the record AND its byte offset (needed for indexing)
+    // READ mode only — no-op if called in WRITE mode
+    void for_each_from_offset(uint64_t start_offset,
+                              std::function<void(const ParsedRecord&, uint64_t)> callback) const;
+
     // Returns the number of records in the file
     size_t count() const;
 
