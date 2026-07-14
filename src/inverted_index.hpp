@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "posting_view.hpp"
 #include "record_store.hpp"
 #include "tokenizer.hpp"
 
@@ -78,9 +79,4 @@ class InvertedIndex {
     // computes IDF score for a token
     // IDF = log(total_records / records_containing_token)
     float idf(const std::string& token) const;
-
-    // intersects two sorted posting lists using two-pointer technique
-    // returns postings present in both with summed scores
-    std::vector<Posting> intersect(const std::vector<Posting>& a,
-                                   const std::vector<Posting>& b) const;
 };
