@@ -39,7 +39,7 @@ See [DESIGN.md](DESIGN.md) for the full architectural writeup — binary format 
 
 ```bash
 # 1. Clone and build
-git clone https://github.com/<you>/histd
+git clone https://github.com/shravanik03/histd.git
 cd histd
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release

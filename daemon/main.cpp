@@ -267,7 +267,7 @@ int main() {
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
-    // daemonize();
+    daemonize();
 
     write_pid_file(PID_FILE);
 
