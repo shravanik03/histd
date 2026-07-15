@@ -142,7 +142,7 @@ void handle_record(const std::string& record, RecordStore& store, InvertedIndex&
     // finds next | returns everything before it
     // advances remaining past the |
     auto next_field = [&]() -> std::string {
-        size_t pos = remaining.find('|');
+        size_t pos = remaining.find('\x1f');
         if (pos == std::string::npos) {
             std::string field = remaining;
             remaining = "";
@@ -153,12 +153,17 @@ void handle_record(const std::string& record, RecordStore& store, InvertedIndex&
         return field;
     };
 
-    rec.cmd = next_field();
-    rec.cwd = next_field();
-    rec.exit_code = std::stoi(next_field());
-    rec.duration_ms = static_cast<uint32_t>(std::stoul(next_field()));
-    rec.timestamp = std::stoull(next_field());
-    rec.session_id = next_field();
+    try {
+        rec.cmd = next_field();
+        rec.cwd = next_field();
+        rec.exit_code = std::stoi(next_field());
+        rec.duration_ms = static_cast<uint32_t>(std::stoul(next_field()));
+        rec.timestamp = std::stoull(next_field());
+        rec.session_id = next_field();
+    } catch (const std::exception& e) {
+        // malformed record — skip silently, daemon must never crash on bad input
+        return;
+    }
 
     uint64_t offset = store.append(rec);
     if (offset == UINT64_MAX) return;  // append failed, skip indexing
@@ -262,7 +267,7 @@ int main() {
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
-    daemonize();
+    // daemonize();
 
     write_pid_file(PID_FILE);
 

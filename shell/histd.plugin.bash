@@ -33,7 +33,8 @@ histd_precmd() {
     local duration=$(($end_time - $HISTD_START_TIME))
     local cwd=$(pwd)
     local timestamp=$(date +%s)
-    local record_string="${HISTD_CMD}|${cwd}|${exit_code}|${duration}|${timestamp}|${HISTD_SESSION_ID}"
+    local sep=$'\x1f'
+    local record_string="${HISTD_CMD}${sep}${cwd}${sep}${exit_code}${sep}${duration}${sep}${timestamp}${sep}${HISTD_SESSION_ID}"
 
     #send record to socket with nc if socket exists
     if [[ -S "$HISTD_SOCKET" ]]; then
